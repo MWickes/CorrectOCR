@@ -1,6 +1,3 @@
-# Code written by Deniz Beser
-# Modified by Matthew Wickes
-
 import os
 import numpy as np
 import timeit
@@ -141,6 +138,9 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
 
 num_header_lines = 12
 full_alignment = True
+#
+os.chdir('C:/Users/Jaeger/Documents/2018/2018Summer/OCR-error-correction/CorrectOCR/CorrectOCR/TEST_STRUCTURE')
+#
 
 for gold_file in os.listdir('train/parallelSource/'):
     errorList = []
@@ -161,22 +161,21 @@ for gold_file in os.listdir('train/parallelSource/'):
     #Run
     start = timeit.default_timer()
        
-    correctedText = ''.join(load_interview(os.path.join('train/parallelSpurce/', gold_file), 
+    correctedText = ''.join(load_interview(os.path.join('train/parallelSource/', gold_file), 
                                            num_header_lines))
     originalText = ''.join(load_interview(os.path.join('original/', original_file), 
                                           num_header_lines))
     
     # Output full alignments or just confusion counts and misread indices
     if full_alignment == True:
-        full_path = os.path.join('parallelAligned/fullAlignments/',
-                                 basename,
-                                 '_full_alignment.txt')
+        full_path = os.path.join('train/parallelAligned/fullAlignments/',
+                                 basename + '_full_alignment.txt')
         newErrors = align(correctedText, originalText, full_output=full_path)
     
     newErrors = align(correctedText, originalText)
     
     # Output the indices of misread characters
-    with open(os.path.join('parallelAligned/misreads/', basename, '_misreads.txt'), 'wb') as f:
+    with open(os.path.join('train/parallelAligned/misreads/', basename + '_misreads.txt'), 'wb') as f:
         json.dump(newErrors, f)
                             
                            
@@ -229,7 +228,7 @@ for gold_file in os.listdir('train/parallelSource/'):
             confusionCountDictionary[char][char] = correctCharCountDict[char] - total
     
     # Output the confusion counts. These will be used to build the HMM    
-    with open(os.path.join('parallelAligned/confusionCounts/', basename, '_confusion.txt'), 'wb') as f:
+    with open(os.path.join('train/parallelAligned/confusionCounts/', basename + '_confusion.txt'), 'wb') as f:
         json.dump(confusionCountDictionary, f)
     
     stop = timeit.default_timer()
