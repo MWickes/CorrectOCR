@@ -4,38 +4,21 @@ import os
 
 
 def load_interview(filename, header=0):
-    """
-    Load an interview and optionally include its header.
-    
-    Keyword arguments:
-        header --- number of header lines to exclude (default 0)  
-    """
     with open(filename, 'rb') as f:
         data = [i.decode('utf-8') for i in f]
 
-##    return data[header:]
-    if filename[-6:-4].isdigit() and filename[-6:-4] != '01':
-        return data
-    else:
-        return data[header:]
+    return data[header:]
 
 
-def load_confusion_counts(pathname, file_list,
-                          remove=[' ', '\n', '\r', u'\ufeff']):
-    """
-    Load the files of confusion counts, remove any keys which are not single
-    characters, remove specified characters, and combine into a single
-    dictionary.
-    
-    Keyword arguments:
-        remove --- characters which should not be included in the output
-            (default [' ', '\\n', '\\r', u'\ufeff'])
-    """
+# Load the files of confusion counts, remove any keys which are not single
+# characters, remove specified characters, and combine into a single
+# dictionary.
+def load_confusion_counts(pathname, file_list, remove=[]):
     # Outer keys are the correct characters. Inner keys are the counts of
     # what each character was read as.
     confusion = collections.defaultdict(lambda: collections.Counter())
     for filename in file_list:
-        with open(pathname + '\\' + filename, 'rb') as f:
+        with open(os.path.join(pathname,filename), 'rb') as f:
             counts = json.load(f, encoding='utf-8')
             for i in counts:
                 confusion[i].update(counts[i])
@@ -61,22 +44,12 @@ def load_confusion_counts(pathname, file_list,
 
     return confusion
 
-
-def interview_char_counts(pathname, interview_list,
-                          remove=[' ', '\n', '\r', u'\ufeff'],
-                          header=0):
-    """
-    Get the character counts of the training interviews. Used for filling in 
-    gaps in the confusion probabilities.
-    
-    Keyword arguments:
-        remove --- characters which should not be included in the output
-            (default [' ', '\\n', '\\r', u'\ufeff'])
-        header --- number of header lines to exclude (default 0)
-    """
+# Get the character counts of the training interviews. Used for filling in 
+# gaps in the confusion probabilities.
+def interview_char_counts(pathname, interview_list, remove=[], header=0):
     char_count = collections.Counter()
     for filename in interview_list:
-        interview = load_interview(pathname + '\\' + filename, header)
+        interview = load_interview(os.path.join(pathname,filename), header)
         c = collections.Counter(''.join(interview))
         char_count.update(c)
 
@@ -87,24 +60,19 @@ def interview_char_counts(pathname, interview_list,
     return char_count
 
 
-# Include novel characters as states whose emission probabilities are set to
+# Create the emission probabilities using confusion counts and character
+# counts. Optionally a file of expected characters can be used to add
+# expected characters as model states whose emission probabilities are set to
 # only output themselves.
-def emission_probabilities(confusion, char_counts,
-                            remove=[' ', '\n', '\r', u'\ufeff'],
-                            alpha=0.0001, char_file=None):
-    """
-    Create the emission probabilities using confusion counts and character
-    counts. Optionally a file of expected characters can be used to add
-    expected characters as model states.
-    """
+def emission_probabilities(confusion, char_counts, alpha,
+                           remove=[], char_file=None):
     # Add missing dictionary elements.
     # Missing outer terms are ones which were always read correctly.    
     for char in char_counts:
         if char not in confusion:
             confusion[char] = {char:char_counts[char]}
             
-    # Inner terms are just added with 0 probability. The Viterbi algorithm
-    # will require every state to have an entry for each possible emission.
+    # Inner terms are just added with 0 probability.
     charset = set().union(*[confusion[i].keys() for i in confusion])
             
     for char in confusion:
@@ -112,7 +80,7 @@ def emission_probabilities(confusion, char_counts,
             if missing not in confusion[char]:
                 confusion[char][missing] = 0.0
     
-    # Smooth and convert to probabilties.
+    # Smooth and convert to probabilities.
     for i in confusion:
         denom = sum(confusion[i].values()) + (alpha * len(confusion[i]))
         for j in confusion[i]:
@@ -139,26 +107,16 @@ def emission_probabilities(confusion, char_counts,
 
     return confusion
     
-
-def init_tran_probabilities(pathname, interview_list,
-                            remove=[' ', '\n', '\r', u'\ufeff'],
-                            alpha=0.0001, header=0, char_file=None):
-    """
-    Create the initial and transition probabilities from the corrected
-    interviews in the training data.
     
-    Keyword arguments:
-        remove --- characters which should not be included in the output
-            (default [' ', '\\n', '\\r', u'\ufeff'])
-        alpha: smoothing parameter (default 0.0001)
-        header: number of header lines to remove from the interview
-            (default 0)
-    """
+# Create the initial and transition probabilities from the corrected
+# interviews in the training data.
+def init_tran_probabilities(pathname, interview_list, alpha,
+                            remove=[], header=0, char_file=None):
     tran = collections.defaultdict(lambda: collections.defaultdict(int))
     init = collections.defaultdict(int)
     
     for filename in interview_list:
-        interview = sf.load_interview(pathname + '\\' + filename, header)
+        interview = load_interview(os.path.join(pathname,filename), header)
 
         for line in interview:
             for word in line.split():
@@ -207,47 +165,41 @@ def init_tran_probabilities(pathname, interview_list,
 
 
 def parameter_check(init, tran, emis):
-    """
-    Check that the parameters of the HMM match.
-    """
-    all_fine = True
+    all_match = True
     if set(init) != set(tran):
-        all_fine = False
+        all_match = False
         print 'Initial keys do not match transition keys.'
     if set(init) != set(emis):
-        all_fine = False
+        all_match = False
         print 'Initial keys do not match emission keys.'
     for key in tran:
         if set(tran[key]) != set(tran):
-            all_fine = False
+            all_match = False
             print 'Outer transition keys do not match inner keys: {}'.format(key)
-    if all_fine == True:
+    if all_match == True:
         print 'Parameters match.'
+    return all_match
 
 
-##test_files = []
-##train_files = []
-##path_to_conf = ''
-##path_to_correct = ''
-##train_conf = [i[2:-4] + '_confusion_counts.txt' for i in train_files]
-##
-##confusion = load_confusion_counts(path_to_conf, train_conf)
-##char_counts = interview_char_counts(path_to_correct, train_files, header=12)
-##
-##character_file = ''
-##emis = emission_probabilities(confusion, char_counts, char_file=character_file)
-##init, train = init_tran_probabilities(path_to_correct, train_files, header=12,
-##                                      char_file=character_file)
 
 num_header_lines = 12
+smoothing_parameter = 0.0001
+remove_chars = [' ', '\n', '\r', u'\ufeff']
 
 # Select the gold files which correspond to the confusion count files.
-train_files = []
+gold_files = []
+confusion_files = []
 for filename in os.listdir('train/HMMtrain/'):
-    train_files.append('c_' + filename.rsplit('.',1)[0] + '.txt')
+    confusion_files(filename)
+    gold_files.append(os.path.join('c_', os.path.splitext(filename)[0], '.txt'))
 
-char_counts = interview_char_counts('corrected/', train_files, num_header_lines)
+confusion = load_confusion_counts('train/HMMtrain/', confusion_files, remove_chars)
+char_counts = interview_char_counts('corrected/', gold_files, remove_chars, num_header_lines)
 
+# Create the emission probabilities from the confusion counts and the character counts
+emis = emission_probabilities(confusion, char_counts, smoothing_parameter,
+                              remove_chars, char_file='resources/SAMPLE_additional_characters')
 
-init, train = init_tran_probabilities('corrected/', train_files, header=12,
-                                      char_file=character_file)
+# Create the initial and transition probabilities from the gold files
+init, train = init_tran_probabilities('corrected/', gold_files, smoothing_parameter,
+                                      remove_chars, num_header_lines, char_file='resources/SAMPLE_additional_characters')
