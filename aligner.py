@@ -4,6 +4,11 @@ import timeit
 import json
 
 
+
+num_header_lines = 12
+full_alignment = True
+
+
 def diagonal(n1,n2,pt):
     if(n1 == n2):
         return pt['MATCH']
@@ -22,7 +27,7 @@ def pointers(di,ho,ve):
          return 'V'
 
 
-def load_interview(filename, header=0):
+def load_text(filename, header=0):
     with open(filename, 'rb') as f:
          data = [i.decode('utf-8') for i in f][header:]
     return data
@@ -84,9 +89,9 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
     i = n-1
     j = m-1
 
-    #####
+    
     fullAlign = []
-    #####
+    
     
     while i != 0 and j != 0:
         val = p_mat[j][i]
@@ -94,9 +99,9 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
         if val == 'D' and al_mat[j-1][i-1] <= al_mat[j][i]: # if match
             i -= 1
             j -= 1
-            #####
+            
             fullAlign.append((s1[i], s2[j]))
-            #####
+            
         else: #there is a discrepancy
             correctString = ''
             incorrectString = ''
@@ -123,11 +128,10 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
             if incorrectString != ' ': wordIndex2 = getWordIndex2(j)
             
             errors.append([correctString, incorrectString, wordIndex, wordIndex2])
-            #####
+            
             fullAlign.append((correctString, incorrectString))
-            #####
+            
 
-    #PARAMETER
     if full_output != '':
         with open(full_output, 'wb') as f:
             json.dump(fullAlign, f)
@@ -135,12 +139,8 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
     return errors
 
 
+#-------------------------------------
 
-num_header_lines = 12
-full_alignment = True
-#
-os.chdir('C:/Users/Jaeger/Documents/2018/2018Summer/OCR-error-correction/CorrectOCR/CorrectOCR/TEST_STRUCTURE')
-#
 
 for gold_file in os.listdir('train/parallelSource/'):
     errorList = []
@@ -161,9 +161,9 @@ for gold_file in os.listdir('train/parallelSource/'):
     #Run
     start = timeit.default_timer()
        
-    correctedText = ''.join(load_interview(os.path.join('train/parallelSource/', gold_file), 
+    correctedText = ''.join(load_text(os.path.join('train/parallelSource/', gold_file), 
                                            num_header_lines))
-    originalText = ''.join(load_interview(os.path.join('original/', original_file), 
+    originalText = ''.join(load_text(os.path.join('original/', original_file), 
                                           num_header_lines))
     
     # Output full alignments or just confusion counts and misread indices
@@ -206,9 +206,9 @@ for gold_file in os.listdir('train/parallelSource/'):
         else:
             correctCharCountDict[char] = 1
 
-    print '% Characters with error', errorCharCount / float(charCount) * 100,'%' 
-    print '% Words with one error:', singleErrorWordCount/ float(wordCount) * 100,'%' 
-    print '% Words with multiple errors:', multipleErrorWordCount/ float(wordCount) * 100,'%' 
+    print 'Characters with error', errorCharCount / float(charCount) * 100 
+    print 'Words with one error:', singleErrorWordCount/ float(wordCount) * 100
+    print 'Words with multiple errors:', multipleErrorWordCount/ float(wordCount) * 100 
     
     # Count the occurrences of errors, to calculate probabilities later
     confusionCountDictionary = {}
