@@ -6,7 +6,15 @@ import re
 import itertools
 import os
 
-import time
+
+
+num_header_lines = 12
+k = 4
+variants = []
+# The variants parameter is expected to be a sequence of pairs of (character, replacement strings)
+# Example:
+# variants = [('m', ['rn','ni'])]
+
 
 class Decoder(object):
 
@@ -19,14 +27,26 @@ class Decoder(object):
             self.prev_decodings = prev_decodings
 
 
-    def decode_word(self, word, k):
+    def decode_word(self, word, k, variants=[]):
         if len(word) == 0:
             return [''] + ['',0.0] * k
 
         if word in self.prev_decodings:
             return [word] + self.prev_decodings[word]
 
-        k_best = self.hmm.k_best_beam(word, k)        
+        k_best = self.hmm.k_best_beam(word, k)
+        # Check for common multi-character errors. If any are present,
+        # make substitutions and compare probabilties of decoder results.
+        for pair in variants:
+            # Only perform the substitution if none of the k-best decodings are present in the dictionary
+            if pair[0] in word and all(self.strip_punctuation(x[0]) not in self.word_dict for x in k_best):
+                variants = self.multichar_variants(word, pair[0], pair[1])
+                for v in variants:
+                    if v != word:
+                        k_best.extend(self.hmm.k_best_beam(v, k))
+                # Keep the k best 
+                k_best = sorted(k_best, key=lambda x: x[1], reverse=True)[:k]
+                   
         k_best = [element for subsequence in k_best for element in subsequence]
         self.prev_decodings[word] = k_best
 
@@ -75,12 +95,10 @@ class HMM(object):
 
         for t in xrange(1, len(char_seq)):
             # (preceding state with max probability, value of max probability)           
-            d = {j:max({i:delta[t-1][i] * self.tran[i][j]
-                        for i in self.states}.iteritems(),
+            d = {j:max({i:delta[t-1][i] * self.tran[i][j] for i in self.states}.iteritems(),
                        key=lambda x: x[1]) for j in self.states}
             
-            delta[t] = {i:d[i][1] * self.emis[i][char_seq[t]]
-                        for i in self.states}
+            delta[t] = {i:d[i][1] * self.emis[i][char_seq[t]] for i in self.states}
             
             back_pointers[t] = {i:d[i][0] for i in self.states}
 
@@ -103,8 +121,7 @@ class HMM(object):
         else:
             # Create the N*N sequences for the first two characters
             # of the word.
-            paths = [((i, j), (self.init[i] * self.emis[i][word[0]]
-                               * self.tran[i][j] * self.emis[j][word[1]]))
+            paths = [((i, j), (self.init[i] * self.emis[i][word[0]] * self.tran[i][j] * self.emis[j][word[1]]))
                      for i in self.states for j in self.states]
 
             # Keep the k best sequences.
@@ -113,8 +130,7 @@ class HMM(object):
             # Continue through the input word, only keeping k sequences at
             # each time step.
             for t in xrange(2, len(word)):
-                temp = [(x[0] + (j,),
-                         (x[1] * self.tran[x[0][-1]][j] * self.emis[j][word[t]]))
+                temp = [(x[0] + (j,), (x[1] * self.tran[x[0][-1]][j] * self.emis[j][word[t]]))
                          for j in self.states for x in paths]
                 paths = sorted(temp, key=lambda x: x[1], reverse=True)[:k]
 
@@ -141,8 +157,7 @@ class UnicodeWriter:
         #self.writer.writerow([s.encode("utf-8") for s in row])
         
         # Modification to avoid attempting to encode non-unicode entries.
-        self.writer.writerow([s.encode("utf-8") if type(s) == unicode else s
-                              for s in row])
+        self.writer.writerow([s.encode("utf-8") if type(s) == unicode else s for s in row])
         
         # Fetch UTF-8 output from the queue ...
         data = self.queue.getvalue()
@@ -208,9 +223,8 @@ def load_csv_unicode(filename, delimiter='\t', quoting=csv.QUOTE_NONE):
     return data
 
 
+#-------------------------------------
 
-num_header_lines = 12
-k = 4
 
 decoded_header = ['Original']
 for i in xrange(k):
@@ -231,7 +245,6 @@ dec = Decoder(load_hmm('resources/hmm_parameters.txt'),
 
 # Decode files
 for filename in os.listdir('toDecode/'):
-    start = time.time()
     words = load_text(os.path.join('toDecode/', filename), num_header_lines)
     decoded_words = []
     
@@ -243,7 +256,7 @@ for filename in os.listdir('toDecode/'):
         elif word == '\r':
             decoded_words.append(['_NEWLINE_R_', '_NEWLINE_R_', 1.0] + ['_NEWLINE_R_', 0.0] * (k-1))
         else:
-            decoded_words.append(dec.decode_word(word, k))
+            decoded_words.append(dec.decode_word(word, k, variants))
 
     with open(os.path.join('decoded/', os.path.splitext(filename)[0] + '_decoded.csv'), 'wb') as f:
         writer = UnicodeWriter(f,
@@ -251,5 +264,3 @@ for filename in os.listdir('toDecode/'):
                                quoting=csv.QUOTE_NONE,
                                quotechar=None)
         writer.writerows(decoded_words)
-    end = time.time()
-    print os.path.splitext(filename)[0], end - start
