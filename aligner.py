@@ -13,6 +13,7 @@ def diagonal(n1,n2,pt):
     else:
         return pt['MISMATCH']
 
+
 def pointers(di,ho,ve):
     pointer = max(di,ho,ve) #based on python default maximum(return the first element).
 
@@ -23,10 +24,12 @@ def pointers(di,ho,ve):
     else:
          return 'V'
 
+
 def load_interview(filename, header=0):
     with open(filename, 'rb') as f:
          data = [i.decode('utf-8') for i in f][header:]
     return data
+
 
 def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
     penalty = {'MATCH': match, 'MISMATCH': mismatch, 'GAP': gap}  # Penalty dictionary
@@ -135,18 +138,11 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
     return errors
 
 
-#directories
-#PARAMETERS
-pathToCorrected = 'C:/Users/Jaeger/Documents/2018/2018Summer/OCR_testing/corrected'
-pathToOriginal = 'C:/Users/Jaeger/Documents/2018/2018Summer/OCR_testing/original'
 
-corrected_prefix = 'c_'
+num_header_lines = 12
+full_alignment = True
 
-pathToOutput = 'C:/Users/Jaeger/Documents/2018/2018Summer/OCR_testing/'
-#TODO: use os.path.splitext() instead of slicing
-
-for original_file in os.listdir(pathToOriginal):    
-    corrected_file = corrected_prefix + original_file
+for gold_file in os.listdir('train/parallelSource/'):
     errorList = []
     wordCount = 0
     singleErrorWordCount = 0
@@ -154,26 +150,36 @@ for original_file in os.listdir(pathToOriginal):
     charCount = 0
     errorCharCount = 0
     correctCharCountDict = {}
+    
+    # Strip prefix from gold file to get name of original file
+    original_file = gold_file[2:]
+    basename = os.path.splitext(original_file)[0]
     print 'Comparing files...'
-    print original_file, '\n', corrected_file
+    print original_file, '\n', gold_file
     
     
     #Run
     start = timeit.default_timer()
        
-    correctedText = ''.join(load_interview(pathToCorrected + '/' 
-                                           + corrected_file, header=12))
-    originalText = ''.join(load_interview(pathToOriginal + '/' 
-                                          + original_file, header=12))
+    correctedText = ''.join(load_interview(os.path.join('train/parallelSpurce/', gold_file), 
+                                           num_header_lines))
+    originalText = ''.join(load_interview(os.path.join('original/', original_file), 
+                                          num_header_lines))
     
-    full_output_filename = pathToOutput + 'full_alignments/' + original_file[:-4] + '_full_alignment.txt'
-    newErrors = align(correctedText, originalText, full_output=full_output_filename)
+    # Output full alignments or just confusion counts and misread indices
+    if full_alignment == True:
+        full_path = os.path.join('parallelAligned/fullAlignments/',
+                                 basename,
+                                 '_full_alignment.txt')
+        newErrors = align(correctedText, originalText, full_output=full_path)
     
-    #PARAMETER
-    alignment_filename = pathToOutput + 'alignments/{}_alignment.txt'.format(
-        corrected_file[2:-4])
-    with open(alignment_filename, 'wb') as f:
+    newErrors = align(correctedText, originalText)
+    
+    # Output the indices of misread characters
+    with open(os.path.join('parallelAligned/misreads/', basename, '_misreads.txt'), 'wb') as f:
         json.dump(newErrors, f)
+                            
+                           
     
     charCount += len(''.join(correctedText.split()))
     errorCharCount += len(newErrors)
@@ -222,10 +228,8 @@ for original_file in os.listdir(pathToOriginal):
             total = sum(confusionCountDictionary[char].values())
             confusionCountDictionary[char][char] = correctCharCountDict[char] - total
     
-    #PARAMETER
-    conf_counts_file = pathToOutput + 'confusion_counts/{}_confusion_counts.txt'.format(
-        corrected_file[2:-4])
-    with open(conf_counts_file, 'wb') as f:
+    # Output the confusion counts. These will be used to build the HMM    
+    with open(os.path.join('parallelAligned/confusionCounts/', basename, '_confusion.txt'), 'wb') as f:
         json.dump(confusionCountDictionary, f)
     
     stop = timeit.default_timer()
