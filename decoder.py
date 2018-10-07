@@ -6,7 +6,7 @@ import re
 import itertools
 import os
 
-
+import time
 
 class Decoder(object):
 
@@ -63,6 +63,7 @@ class HMM(object):
         self.states = initial.keys()
         self.symbols = emission[self.states[0]].keys()
 
+
     def viterbi(self, char_seq):
         # delta[t][j] is probability of max probability path to state j
         # at time t given the observation sequence up to time t.
@@ -92,7 +93,7 @@ class HMM(object):
 
         return ''.join(selected_states)
 
-    # Beam search, not Viterbi.
+
     def k_best_beam(self, word, k):
         # Single symbol input is just initial * emission.
         if len(word) == 1:
@@ -210,6 +211,7 @@ def load_csv_unicode(filename, delimiter='\t', quoting=csv.QUOTE_NONE):
 
 num_header_lines = 12
 k = 4
+
 decoded_header = ['Original']
 for i in xrange(k):
     decoded_header.extend(['{}-best'.format(i+1),
@@ -224,20 +226,30 @@ for filename in os.listdir('decoded/'):
 
 # Load the rest of the parameters and create the decoder
 dec = Decoder(load_hmm('resources/hmm_parameters.txt'),
-              load_dictionary('resources/SAMPLE_dictionary.txt'),
+              load_dictionary('resources/dictionary.txt'),
               prev_decodings)
 
 # Decode files
-for filename in os.listdir('to_decode/'):
-    words = load_text(os.path.join('to_decode/', filename), num_header_lines)
+for filename in os.listdir('toDecode/'):
+    start = time.time()
+    words = load_text(os.path.join('toDecode/', filename), num_header_lines)
     decoded_words = []
     
+    # Newline characters are kept to recreate the text later, but are not passed to the decoder
+    # They are replaced by labeled strings for writing to csv
     for word in words:
-        decoded_words.append(dec.decode_word(word, k))
+        if word == '\n':
+            decoded_words.append(['_NEWLINE_N_', '_NEWLINE_N_', 1.0] + ['_NEWLINE_N_', 0.0] * (k-1))
+        elif word == '\r':
+            decoded_words.append(['_NEWLINE_R_', '_NEWLINE_R_', 1.0] + ['_NEWLINE_R_', 0.0] * (k-1))
+        else:
+            decoded_words.append(dec.decode_word(word, k))
 
-    with open(os.path.join('decoded/', filename), 'wb') as f:
-        writer = dec.UnicodeWriter(f,
-                                   dialect=csv.excel_tab,
-                                   quoting=csv.QUOTE_NONE,
-                                   quotechar=None)
+    with open(os.path.join('decoded/', os.path.splitext(filename)[0] + '_decoded.csv'), 'wb') as f:
+        writer = UnicodeWriter(f,
+                               dialect=csv.excel_tab,
+                               quoting=csv.QUOTE_NONE,
+                               quotechar=None)
         writer.writerows(decoded_words)
+    end = time.time()
+    print os.path.splitext(filename)[0], end - start
