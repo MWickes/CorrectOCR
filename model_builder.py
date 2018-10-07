@@ -3,7 +3,13 @@ import json
 import os
 
 
-def load_interview(filename, header=0):
+
+num_header_lines = 12
+smoothing_parameter = 0.0001
+remove_chars = [' ', '\n', '\r', u'\ufeff']
+
+
+def load_text(filename, header=0):
     with open(filename, 'rb') as f:
         data = [i.decode('utf-8') for i in f]
 
@@ -46,11 +52,11 @@ def load_confusion_counts(file_list, remove=[]):
 
 # Get the character counts of the training files. Used for filling in 
 # gaps in the confusion probabilities.
-def interview_char_counts(file_list, remove=[], header=0):
+def text_char_counts(file_list, remove=[], header=0):
     char_count = collections.Counter()
     for filename in file_list:
-        interview = load_interview(os.path.join('train/parallelSource/',filename), header)
-        c = collections.Counter(''.join(interview))
+        text = load_text(os.path.join('train/parallelSource/',filename), header)
+        c = collections.Counter(''.join(text))
         char_count.update(c)
 
     for unwanted in remove:
@@ -86,7 +92,7 @@ def emission_probabilities(confusion, char_counts, alpha,
         for j in confusion[i]:
             confusion[i][j] = (confusion[i][j] + alpha) / denom
 
-    # Add characters that are expected to occur in the interviews.
+    # Add characters that are expected to occur in the texts.
     if char_file is not None:
         with open(char_file, 'rb') as f:
             extra_chars = set(json.load(f, encoding='utf-8'))
@@ -109,16 +115,16 @@ def emission_probabilities(confusion, char_counts, alpha,
     
     
 # Create the initial and transition probabilities from the corrected
-# interviews in the training data.
-def init_tran_probabilities(interview_list, alpha,
+# text in the training data.
+def init_tran_probabilities(file_list, alpha,
                             remove=[], header=0, char_file=None):
     tran = collections.defaultdict(lambda: collections.defaultdict(int))
     init = collections.defaultdict(int)
     
-    for filename in interview_list:
-        interview = load_interview(os.path.join('train/parallelSource/',filename), header)
+    for filename in file_list:
+        text = load_text(os.path.join('train/parallelSource/',filename), header)
 
-        for line in interview:
+        for line in text:
             for word in line.split():
                 if len(word) > 0:
                     init[word[0]] += 1
@@ -132,7 +138,7 @@ def init_tran_probabilities(interview_list, alpha,
     for key in tran:
         charset.update(set(tran[key].keys()))
 
-    # Add characters that are expected to occur in the interviews.
+    # Add characters that are expected to occur in the texts.
     if char_file is not None:
         with open(char_file, 'rb') as f:
             extra_chars = json.load(f, encoding='utf-8')
@@ -181,10 +187,8 @@ def parameter_check(init, tran, emis):
     return all_match
 
 
+#-------------------------------------
 
-num_header_lines = 12
-smoothing_parameter = 0.0001
-remove_chars = [' ', '\n', '\r', u'\ufeff']
 
 # Select the gold files which correspond to the confusion count files.
 gold_files = []
@@ -195,7 +199,7 @@ for filename in os.listdir('train/HMMtrain/'):
     gold_files.append('c_' + os.path.splitext(filename)[0][:-10] + '.txt')
 
 confusion = load_confusion_counts(confusion_files, remove_chars)
-char_counts = interview_char_counts(gold_files, remove_chars, num_header_lines)
+char_counts = text_char_counts(gold_files, remove_chars, num_header_lines)
 
 # Create the emission probabilities from the confusion counts and the character counts
 emis = emission_probabilities(confusion, char_counts, smoothing_parameter, remove_chars, 
