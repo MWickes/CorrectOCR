@@ -13,12 +13,12 @@ def load_interview(filename, header=0):
 # Load the files of confusion counts, remove any keys which are not single
 # characters, remove specified characters, and combine into a single
 # dictionary.
-def load_confusion_counts(pathname, file_list, remove=[]):
+def load_confusion_counts(file_list, remove=[]):
     # Outer keys are the correct characters. Inner keys are the counts of
     # what each character was read as.
     confusion = collections.defaultdict(lambda: collections.Counter())
     for filename in file_list:
-        with open(os.path.join(pathname,filename), 'rb') as f:
+        with open(os.path.join('train/HMMtrain/',filename), 'rb') as f:
             counts = json.load(f, encoding='utf-8')
             for i in counts:
                 confusion[i].update(counts[i])
@@ -44,12 +44,12 @@ def load_confusion_counts(pathname, file_list, remove=[]):
 
     return confusion
 
-# Get the character counts of the training interviews. Used for filling in 
+# Get the character counts of the training files. Used for filling in 
 # gaps in the confusion probabilities.
-def interview_char_counts(pathname, interview_list, remove=[], header=0):
+def interview_char_counts(file_list, remove=[], header=0):
     char_count = collections.Counter()
-    for filename in interview_list:
-        interview = load_interview(os.path.join(pathname,filename), header)
+    for filename in file_list:
+        interview = load_interview(os.path.join('train/parallelSource/',filename), header)
         c = collections.Counter(''.join(interview))
         char_count.update(c)
 
@@ -110,13 +110,13 @@ def emission_probabilities(confusion, char_counts, alpha,
     
 # Create the initial and transition probabilities from the corrected
 # interviews in the training data.
-def init_tran_probabilities(pathname, interview_list, alpha,
+def init_tran_probabilities(interview_list, alpha,
                             remove=[], header=0, char_file=None):
     tran = collections.defaultdict(lambda: collections.defaultdict(int))
     init = collections.defaultdict(int)
     
     for filename in interview_list:
-        interview = load_interview(os.path.join(pathname,filename), header)
+        interview = load_interview(os.path.join('train/parallelSource/',filename), header)
 
         for line in interview:
             for word in line.split():
@@ -190,16 +190,22 @@ remove_chars = [' ', '\n', '\r', u'\ufeff']
 gold_files = []
 confusion_files = []
 for filename in os.listdir('train/HMMtrain/'):
-    confusion_files(filename)
-    gold_files.append(os.path.join('c_', os.path.splitext(filename)[0], '.txt'))
+    confusion_files.append(filename)
+    # [:-10] is to remove '_confusion'
+    gold_files.append('c_' + os.path.splitext(filename)[0][:-10] + '.txt')
 
-confusion = load_confusion_counts('train/HMMtrain/', confusion_files, remove_chars)
-char_counts = interview_char_counts('corrected/', gold_files, remove_chars, num_header_lines)
+confusion = load_confusion_counts(confusion_files, remove_chars)
+char_counts = interview_char_counts(gold_files, remove_chars, num_header_lines)
 
 # Create the emission probabilities from the confusion counts and the character counts
-emis = emission_probabilities(confusion, char_counts, smoothing_parameter,
-                              remove_chars, char_file='resources/SAMPLE_additional_characters')
+emis = emission_probabilities(confusion, char_counts, smoothing_parameter, remove_chars, 
+                              char_file='resources/additional_characters.txt')
 
 # Create the initial and transition probabilities from the gold files
-init, train = init_tran_probabilities('corrected/', gold_files, smoothing_parameter,
-                                      remove_chars, num_header_lines, char_file='resources/SAMPLE_additional_characters')
+init, tran = init_tran_probabilities(gold_files, smoothing_parameter,
+                                     remove_chars, num_header_lines, 
+                                     char_file='resources/additional_characters.txt')
+
+if parameter_check(init, tran, emis) == True:
+    with open('resources/hmm_parameters.txt','wb') as f:
+        json.dump((init, tran, emis), f)
