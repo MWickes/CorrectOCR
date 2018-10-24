@@ -2,12 +2,21 @@ import os
 import numpy as np
 import timeit
 import json
+import argparse
 
 
 
+# - - - Defaults - - -
+# Setting
 num_header_lines = 12
-full_alignment = True
+output_full_alignment = True
 
+# Outputs
+dir_full = 'train/parallelAligned/fullAlignments/'
+dir_misread = 'train/parallelAligned/misreads/'
+dir_misread_counts = 'train/parallelAligned/confusionCounts/'
+
+#-------------------------------------
 
 def diagonal(n1,n2,pt):
     if(n1 == n2):
@@ -141,8 +150,13 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
 
 #-------------------------------------
 
-
-for gold_file in os.listdir('train/parallelSource/'):
+if __name__=='__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('original_file', help='original version of file')
+    parser.add_argument('gold_file', help='corrected version of file')
+    
+    args = parser.parse_args()
+    
     errorList = []
     wordCount = 0
     singleErrorWordCount = 0
@@ -151,35 +165,27 @@ for gold_file in os.listdir('train/parallelSource/'):
     errorCharCount = 0
     correctCharCountDict = {}
     
-    # Strip prefix from gold file to get name of original file
-    original_file = gold_file[2:]
-    basename = os.path.splitext(original_file)[0]
+    basename = os.path.splitext(os.path.basename(args.original_file))[0]
     print 'Comparing files...'
-    print original_file, '\n', gold_file
-    
+    print args.original_file, '\n', args.gold_file
     
     #Run
     start = timeit.default_timer()
-       
-    correctedText = ''.join(load_text(os.path.join('train/parallelSource/', gold_file), 
-                                           num_header_lines))
-    originalText = ''.join(load_text(os.path.join('original/', original_file), 
-                                          num_header_lines))
+    
+    correctedText = ''.join(load_text(args.gold_file, num_header_lines))
+    originalText = ''.join(load_text(args.original_file, num_header_lines))
     
     # Output full alignments or just confusion counts and misread indices
-    if full_alignment == True:
-        full_path = os.path.join('train/parallelAligned/fullAlignments/',
-                                 basename + '_full_alignment.txt')
+    if output_full_alignment == True:
+        full_path = os.path.join(dir_full, basename + '_full_alignment.txt')
         newErrors = align(correctedText, originalText, full_output=full_path)
     
     newErrors = align(correctedText, originalText)
     
     # Output the indices of misread characters
-    with open(os.path.join('train/parallelAligned/misreads/', basename + '_misreads.txt'), 'wb') as f:
+    with open(os.path.join(dir_misread, basename + '_misreads.txt'), 'wb') as f:
         json.dump(newErrors, f)
-                            
-                           
-    
+        
     charCount += len(''.join(correctedText.split()))
     errorCharCount += len(newErrors)
 
@@ -198,7 +204,7 @@ for gold_file in os.listdir('train/parallelSource/'):
     singleErrorWordCount += len(seen) - len(marked)
 
     errorList += newErrors
-
+    
     #Get correct char counts
     for char in correctedText:
         if char in correctCharCountDict:
@@ -228,8 +234,8 @@ for gold_file in os.listdir('train/parallelSource/'):
             confusionCountDictionary[char][char] = correctCharCountDict[char] - total
     
     # Output the confusion counts. These will be used to build the HMM    
-    with open(os.path.join('train/parallelAligned/confusionCounts/', basename + '_confusion.txt'), 'wb') as f:
+    with open(os.path.join(dir_misread_counts, basename + '_confusion.txt'), 'wb') as f:
         json.dump(confusionCountDictionary, f)
     
     stop = timeit.default_timer()
-    print '\nCompleted in', stop - start, 'seconds.' 
+    print '\nCompleted in', stop - start, 'seconds.'
