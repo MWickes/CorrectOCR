@@ -4,10 +4,21 @@ import os
 
 
 
+# - - - Defaults - - -
+# Settings
 num_header_lines = 12
 smoothing_parameter = 0.0001
-remove_chars = [' ', '\n', '\r', u'\ufeff']
+remove_chars = [' ', '\t', '\n', '\r', u'\ufeff']
 
+# Inputs
+add_chars='resources/additional_characters.txt'
+sourcedir_hmm = 'train/HMMtrain/'
+sourcedir_gold = 'train/parallelSource/'
+
+# Output
+hmm_params = 'resources/hmm_parameters.txt'
+
+#-------------------------------------
 
 def load_text(filename, header=0):
     with open(filename, 'rb') as f:
@@ -24,7 +35,7 @@ def load_confusion_counts(file_list, remove=[]):
     # what each character was read as.
     confusion = collections.defaultdict(lambda: collections.Counter())
     for filename in file_list:
-        with open(os.path.join('train/HMMtrain/',filename), 'rb') as f:
+        with open(os.path.join(sourcedir_hmm,filename), 'rb') as f:
             counts = json.load(f, encoding='utf-8')
             for i in counts:
                 confusion[i].update(counts[i])
@@ -55,7 +66,7 @@ def load_confusion_counts(file_list, remove=[]):
 def text_char_counts(file_list, remove=[], header=0):
     char_count = collections.Counter()
     for filename in file_list:
-        text = load_text(os.path.join('train/parallelSource/',filename), header)
+        text = load_text(os.path.join(sourcedir_gold, filename), header)
         c = collections.Counter(''.join(text))
         char_count.update(c)
 
@@ -122,7 +133,7 @@ def init_tran_probabilities(file_list, alpha,
     init = collections.defaultdict(int)
     
     for filename in file_list:
-        text = load_text(os.path.join('train/parallelSource/',filename), header)
+        text = load_text(os.path.join(sourcedir_gold, filename), header)
 
         for line in text:
             for word in line.split():
@@ -189,13 +200,12 @@ def parameter_check(init, tran, emis):
 
 #-------------------------------------
 
-
 # Select the gold files which correspond to the confusion count files.
 gold_files = []
 confusion_files = []
-for filename in os.listdir('train/HMMtrain/'):
+for filename in os.listdir(sourcedir_hmm):
     confusion_files.append(filename)
-    # [:-10] is to remove '_confusion'
+    # [:-10] is to remove '_confusion' from the filename
     gold_files.append('c_' + os.path.splitext(filename)[0][:-10] + '.txt')
 
 confusion = load_confusion_counts(confusion_files, remove_chars)
@@ -203,13 +213,13 @@ char_counts = text_char_counts(gold_files, remove_chars, num_header_lines)
 
 # Create the emission probabilities from the confusion counts and the character counts
 emis = emission_probabilities(confusion, char_counts, smoothing_parameter, remove_chars, 
-                              char_file='resources/additional_characters.txt')
+                              char_file=add_chars)
 
 # Create the initial and transition probabilities from the gold files
 init, tran = init_tran_probabilities(gold_files, smoothing_parameter,
                                      remove_chars, num_header_lines, 
-                                     char_file='resources/additional_characters.txt')
+                                     char_file=add_chars)
 
 if parameter_check(init, tran, emis) == True:
-    with open('resources/hmm_parameters.txt','wb') as f:
+    with open(hmm_params,'wb') as f:
         json.dump((init, tran, emis), f)
