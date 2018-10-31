@@ -14,7 +14,7 @@ output_full_alignment = True
 # Outputs
 dir_full = 'train/parallelAligned/fullAlignments/'
 dir_misread = 'train/parallelAligned/misreads/'
-dir_misread_counts = 'train/parallelAligned/confusionCounts/'
+dir_misread_counts = 'train/parallelAligned/misreadCounts/'
 
 #-------------------------------------
 
@@ -142,9 +142,12 @@ def align(s1, s2, match=1, mismatch=-1, gap=-1, full_output=''):
             
 
     if full_output != '':
+        fullAlign.reverse()
         with open(full_output, 'wb') as f:
             json.dump(fullAlign, f)
-    #format: [[correct, incorrect, word index],...])
+            
+    # format: [[correct, incorrect, word index, word index2],...]
+    errors.reverse()
     return errors
 
 
@@ -157,7 +160,6 @@ if __name__=='__main__':
     
     args = parser.parse_args()
     
-    errorList = []
     wordCount = 0
     singleErrorWordCount = 0
     multipleErrorWordCount = 0
@@ -175,7 +177,7 @@ if __name__=='__main__':
     correctedText = ''.join(load_text(args.gold_file, num_header_lines))
     originalText = ''.join(load_text(args.original_file, num_header_lines))
     
-    # Output full alignments or just confusion counts and misread indices
+    # Output full alignments or just misread counts and misread indices
     if output_full_alignment == True:
         full_path = os.path.join(dir_full, basename + '_full_alignment.txt')
         newErrors = align(correctedText, originalText, full_output=full_path)
@@ -202,8 +204,6 @@ if __name__=='__main__':
             marked.append(index)
     multipleErrorWordCount += len(marked)
     singleErrorWordCount += len(seen) - len(marked)
-
-    errorList += newErrors
     
     #Get correct char counts
     for char in correctedText:
@@ -217,25 +217,25 @@ if __name__=='__main__':
     print 'Words with multiple errors:', multipleErrorWordCount/ float(wordCount) * 100 
     
     # Count the occurrences of errors, to calculate probabilities later
-    confusionCountDictionary = {}
-    for char, mistake, _, _ in errorList:
-        if char in confusionCountDictionary:
-            if mistake in confusionCountDictionary[char]:
-                confusionCountDictionary[char][mistake] += 1
+    misreadCountDictionary = {}
+    for char, mistake, _, _ in newErrors:
+        if char in misreadCountDictionary:
+            if mistake in misreadCountDictionary[char]:
+                misreadCountDictionary[char][mistake] += 1
             else:
-                confusionCountDictionary[char][mistake] = 1
+                misreadCountDictionary[char][mistake] = 1
         else:
-            confusionCountDictionary[char] = {mistake : 1}
+            misreadCountDictionary[char] = {mistake : 1}
     
     # Add counts of correct chars to the dictionary
-    for char in confusionCountDictionary:
+    for char in misreadCountDictionary:
         if len(char) == 1:
-            total = sum(confusionCountDictionary[char].values())
-            confusionCountDictionary[char][char] = correctCharCountDict[char] - total
+            total = sum(misreadCountDictionary[char].values())
+            misreadCountDictionary[char][char] = correctCharCountDict[char] - total
     
-    # Output the confusion counts. These will be used to build the HMM    
-    with open(os.path.join(dir_misread_counts, basename + '_confusion.txt'), 'wb') as f:
-        json.dump(confusionCountDictionary, f)
+    # Output the misread counts. These will be used to build the HMM    
+    with open(os.path.join(dir_misread_counts, basename + '_misread_counts.txt'), 'wb') as f:
+        json.dump(misreadCountDictionary, f)
     
     stop = timeit.default_timer()
     print '\nCompleted in', stop - start, 'seconds.'
