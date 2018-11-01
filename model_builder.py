@@ -27,10 +27,10 @@ def load_text(filename, header=0):
     return data[header:]
 
 
-# Load the files of confusion counts, remove any keys which are not single
+# Load the files of misread counts, remove any keys which are not single
 # characters, remove specified characters, and combine into a single
 # dictionary.
-def load_confusion_counts(file_list, remove=[]):
+def load_misread_counts(file_list, remove=[]):
     # Outer keys are the correct characters. Inner keys are the counts of
     # what each character was read as.
     confusion = collections.defaultdict(lambda: collections.Counter())
@@ -77,7 +77,7 @@ def text_char_counts(file_list, remove=[], header=0):
     return char_count
 
 
-# Create the emission probabilities using confusion counts and character
+# Create the emission probabilities using misread counts and character
 # counts. Optionally a file of expected characters can be used to add
 # expected characters as model states whose emission probabilities are set to
 # only output themselves.
@@ -200,18 +200,18 @@ def parameter_check(init, tran, emis):
 
 #-------------------------------------
 
-# Select the gold files which correspond to the confusion count files.
+# Select the gold files which correspond to the misread count files.
 gold_files = []
-confusion_files = []
+misread_files = []
 for filename in os.listdir(sourcedir_hmm):
-    confusion_files.append(filename)
-    # [:-10] is to remove '_confusion' from the filename
-    gold_files.append('c_' + os.path.splitext(filename)[0][:-10] + '.txt')
+    misread_files.append(filename)
+    # [:-10] is to remove '_misread_counts' from the filename
+    gold_files.append('c_' + os.path.splitext(filename)[0][:-15] + '.txt')
 
-confusion = load_confusion_counts(confusion_files, remove_chars)
+confusion = load_misread_counts(misread_files, remove_chars)
 char_counts = text_char_counts(gold_files, remove_chars, num_header_lines)
 
-# Create the emission probabilities from the confusion counts and the character counts
+# Create the emission probabilities from the misread counts and the character counts
 emis = emission_probabilities(confusion, char_counts, smoothing_parameter, remove_chars, 
                               char_file=add_chars)
 
