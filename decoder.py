@@ -4,21 +4,12 @@ import cStringIO
 import codecs
 import re
 import itertools
-import os
 
-
-
-num_header_lines = 12
-k = 4
-variants = []
-# The variants parameter is expected to be a sequence of pairs of (character, replacement strings)
-# Example:
-# variants = [('m', ['rn','ni'])]
 
 
 class Decoder(object):
 
-    def __init__(self, hmm, word_dict, prev_decodings=None, substitutions=None):
+    def __init__(self, hmm, word_dict, prev_decodings=None):
         self.hmm = hmm
         self.word_dict = word_dict
         if prev_decodings is None:
@@ -27,7 +18,7 @@ class Decoder(object):
             self.prev_decodings = prev_decodings
 
 
-    def decode_word(self, word, k, variants=[]):
+    def decode_word(self, word, k, multichars={}):
         if len(word) == 0:
             return [''] + ['',0.0] * k
 
@@ -37,11 +28,11 @@ class Decoder(object):
         k_best = self.hmm.k_best_beam(word, k)
         # Check for common multi-character errors. If any are present,
         # make substitutions and compare probabilties of decoder results.
-        for pair in variants:
+        for sub in multichars:
             # Only perform the substitution if none of the k-best decodings are present in the dictionary
-            if pair[0] in word and all(self.strip_punctuation(x[0]) not in self.word_dict for x in k_best):
-                variants = self.multichar_variants(word, pair[0], pair[1])
-                for v in variants:
+            if sub in word and all(self.strip_punctuation(x[0]) not in self.word_dict for x in k_best):
+                variant_words = self.multichar_variants(word, sub, multichars[sub])
+                for v in variant_words:
                     if v != word:
                         k_best.extend(self.hmm.k_best_beam(v, k))
                 # Keep the k best 
@@ -67,6 +58,7 @@ class Decoder(object):
 
 
     def strip_punctuation(self, word):
+        # Everything from string.punctuation
         punctuation = re.escape('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~')
         word = re.sub('[' + punctuation + ']+', '', word)    
         return word
@@ -221,46 +213,3 @@ def load_csv_unicode(filename, delimiter='\t', quoting=csv.QUOTE_NONE):
         data = [[unicode(element, 'utf-8') for element in line]
                 for line in reader]
     return data
-
-
-#-------------------------------------
-
-
-decoded_header = ['Original']
-for i in xrange(k):
-    decoded_header.extend(['{}-best'.format(i+1),
-                           '{}-best prob.'.format(i+1)])
-
-# Load previously done decodings if any
-prev_decodings = dict()
-
-for filename in os.listdir('decoded/'):
-    for line in load_csv_unicode(os.path.join('decoded/', filename))[1:]:
-        prev_decodings[line[0]] = line[1:]
-
-# Load the rest of the parameters and create the decoder
-dec = Decoder(load_hmm('resources/hmm_parameters.txt'),
-              load_dictionary('resources/dictionary.txt'),
-              prev_decodings)
-
-# Decode files
-for filename in os.listdir('toDecode/'):
-    words = load_text(os.path.join('toDecode/', filename), num_header_lines)
-    decoded_words = []
-    
-    # Newline characters are kept to recreate the text later, but are not passed to the decoder
-    # They are replaced by labeled strings for writing to csv
-    for word in words:
-        if word == '\n':
-            decoded_words.append(['_NEWLINE_N_', '_NEWLINE_N_', 1.0] + ['_NEWLINE_N_', 0.0] * (k-1))
-        elif word == '\r':
-            decoded_words.append(['_NEWLINE_R_', '_NEWLINE_R_', 1.0] + ['_NEWLINE_R_', 0.0] * (k-1))
-        else:
-            decoded_words.append(dec.decode_word(word, k, variants))
-
-    with open(os.path.join('decoded/', os.path.splitext(filename)[0] + '_decoded.csv'), 'wb') as f:
-        writer = UnicodeWriter(f,
-                               dialect=csv.excel_tab,
-                               quoting=csv.QUOTE_NONE,
-                               quotechar=None)
-        writer.writerows(decoded_words)
